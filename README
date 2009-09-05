@@ -34,6 +34,6 @@ Of course, you can run "dumptter" by
 
   $ dumptter
 
-when if you copy "dumptter" to the directory included in PATH
+when you copy "dumptter" to the directory included in PATH
 and make it executable by using chmod.
 
