@@ -1,0 +1,166 @@
+#!/usr/bin/ruby
+# -*- coding: utf-8 -*-
+
+require 'time'
+require 'rubygems'
+gem 'twitter4r', '>=0.3.1'
+require 'twitter'
+require 'active_record'
+require 'sqlite3'
+require 'kconv'
+require 'highline'
+require 'base64'
+
+$KCODE='utf-8'
+$env_code = Kconv::UTF8
+
+DUMPTTER_DIR="#{ENV['HOME']}/.dumptter"
+YAML_FILE="#{DUMPTTER_DIR}/config.yaml"
+DB_FILE="#{DUMPTTER_DIR}/dumptter.db"
+
+errors = []
+
+twitter_user = ''
+twitter_pass = ''
+
+ActiveRecord::Base.establish_connection(
+                                        :adapter => 'sqlite3',
+                                        :dbfile  => DB_FILE
+                                        )
+
+class InitialSchema < ActiveRecord::Migration
+  def self.up
+    create_table :statuses do |t|
+      t.column :status_id, :integer, :null => false
+      t.column :status_text, :text
+      t.column :user_id, :integer, :null => false
+      t.column :user_screen_name, :text
+      t.column :status_reply, :boolean
+      t.column :status_at, :timestamp
+      t.column :created_at, :timestamp
+      t.column :updated_at, :timestamp
+    end
+  end
+  def self.down
+    drop_table :statuses
+  end
+end
+
+def check_errors(errors)
+  if errors.size > 0
+    errors.each{|error|
+      print "Error: #{error}\n"
+    }
+    exit
+  end
+end
+
+if FileTest.exist?(DUMPTTER_DIR)
+  if FileTest::directory?(DUMPTTER_DIR)
+  else
+    errors << "'#{DUMPTTER_DIR}/' is not a directory."
+  end
+else
+  Dir.mkdir("#{DUMPTTER_DIR}")
+end
+check_errors(errors)
+
+if FileTest.exist?(YAML_FILE)
+  if FileTest::file?(YAML_FILE)
+  else
+    errors << "'#{YAML_FILE}' is not a file."
+  end
+else
+  print "Please enter your twitter account information.\n"
+  user=HighLine.new.ask('Username or E-mail: ')
+  pass=Base64.encode64(HighLine.new.ask('Password: ') {|q| q.echo = '*' })
+  yaml_io = File.open("#{YAML_FILE}",'w')
+  yaml_io.puts "user: #{user}"
+  yaml_io.puts "pass: #{pass}"
+  yaml_io.close
+end
+check_errors(errors)
+
+invalid_yaml = false
+File.open(YAML_FILE) do |io|
+  YAML.load_documents(io) do |y|
+    defined? y['user'] ? twitter_user=y['user'] : invalid_yaml = true
+    defined? y['pass'] ? twitter_pass=Base64.decode64(y['pass']) : invalid_yaml = true
+  end
+end
+if invalid_yaml
+  errors << "'#{YAML_FILE}' is invalid."
+end
+if twitter_user == '' || twitter_pass == ''
+  errors << "'#{YAML_FILE}' is invalid."
+end
+check_errors(errors)
+
+if FileTest.exist?(DB_FILE)
+  if FileTest::file?(DB_FILE)
+  else
+    errors << "'#{DB_FILE}' is not a file."
+  end
+else
+  InitialSchema.migrate(:up)
+end
+
+class Status < ActiveRecord::Base
+end
+
+client = Twitter::Client.new(
+                             :login => twitter_user,
+                             :password => twitter_pass
+                             )
+
+latest_status = Status.find(:first, :order=>"status_at DESC")
+if latest_status.nil?
+  mode = 'init'
+  print "Collecting your all tweets (up to 3200, limited in API).\n"
+else
+  mode = 'update'
+  print "Collecting your new tweets (up to 3200, limited in API).\n"
+end
+all_timeline = []
+loop = true
+page = 1
+while loop == true do
+  if mode == 'init'
+    timeline = client.timeline_for(:me, :count => 200, :page => page)
+  else
+    timeline = client.timeline_for(:me, :count => 200, :since_id => latest_status.status_id, :page => page)
+  end
+  if timeline.size < 200
+    loop = false
+  end
+  if page >= 16
+    loop = false
+  end
+  all_timeline = all_timeline + timeline
+  page = page + 1
+end
+
+all_timeline.reverse.each{|status|
+  if status.in_reply_to_status_id == nil
+    reply = FALSE
+  else
+    reply = TRUE
+  end
+  statuses = []
+  statuses.push(
+                Status.new(
+                           :status_id => status.id,
+                           :status_text => status.text,
+                           :user_id => status.user.id,
+                           :user_screen_name => status.user.screen_name,
+                           :status_reply => reply,
+                           :status_at => Time.at(status.created_at.to_i)
+                           )
+                )
+  Status.transaction {
+    statuses.each{|new_status|
+      new_status.save
+    }
+  }
+}
+
