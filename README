@@ -1,0 +1,39 @@
+= Script of "dumptter"
+
+This script collect your tweets on twitter.com.
+
+= DEPENDENCY
+
+This library uses the following external Ruby libraries.
+
+  highline
+  twitter4r
+  activerecord
+  sqlite3
+
+You can install them using gem.
+
+  sudo gem install highline
+  sudo gem install twitter4r
+  sudo gem install activerecord
+  sudo gem install sqlite3-ruby
+
+= SYNOPSIS
+
+== How to Run This Script
+
+Just execute the following command:
+
+  $ ruby /path/to/dumptter
+
+This script will create $HOME/.dumptter directory and
+create config YAML file including your twitter account
+and sqlite3 database file in the directory.
+
+Of course, you can run "dumptter" by
+
+  $ dumptter
+
+when if you copy "dumptter" to the directory included in PATH
+and make it executable by using chmod.
+
