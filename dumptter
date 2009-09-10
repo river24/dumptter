@@ -136,13 +136,13 @@ while loop == true do
   page = page + 1
 end
 
+statuses = []
 all_timeline.reverse.each{|status|
   if status.in_reply_to_status_id == nil
     reply = FALSE
   else
     reply = TRUE
   end
-  statuses = []
   statuses.push(
                 Status.new(
                            :status_id => status.id,
@@ -153,10 +153,13 @@ all_timeline.reverse.each{|status|
                            :status_at => Time.at(status.created_at.to_i)
                            )
                 )
+}
+
+if statuses.size > 0
   Status.transaction {
     statuses.each{|new_status|
       new_status.save
     }
   }
-}
+end
 
