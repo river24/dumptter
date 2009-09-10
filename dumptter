@@ -7,12 +7,8 @@ gem 'twitter4r'
 require 'twitter'
 require 'activerecord'
 require 'sqlite3'
-require 'kconv'
 require 'highline'
 require 'base64'
-
-$KCODE='utf-8'
-$env_code = Kconv::UTF8
 
 DUMPTTER_DIR="#{ENV['HOME']}/.dumptter"
 YAML_FILE="#{DUMPTTER_DIR}/config.yaml"
@@ -25,7 +21,7 @@ twitter_pass = ''
 
 ActiveRecord::Base.establish_connection(
                                         :adapter => 'sqlite3',
-                                        :dbfile  => DB_FILE
+                                        :database  => DB_FILE
                                         )
 
 class InitialSchema < ActiveRecord::Migration
