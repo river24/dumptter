@@ -3,9 +3,9 @@
 
 require 'time'
 require 'rubygems'
-gem 'twitter4r'
-require 'twitter'
-require 'activerecord'
+require 'rubytter'
+require 'oauth'
+require 'active_record'
 require 'sqlite3'
 require 'highline'
 require 'base64'
@@ -16,8 +16,10 @@ DB_FILE="#{DUMPTTER_DIR}/dumptter.db"
 
 errors = []
 
-twitter_user = ''
-twitter_pass = ''
+twitter_consumer_key=''
+twitter_consumer_secret=''
+twitter_token_key=''
+twitter_token_secret=''
 
 ActiveRecord::Base.establish_connection(
                                         :adapter => 'sqlite3',
@@ -67,12 +69,31 @@ if FileTest.exist?(YAML_FILE)
     errors << "'#{YAML_FILE}' is not a file."
   end
 else
-  print "Please enter your twitter account information.\n"
-  user=HighLine.new.ask('Username or E-mail: ')
-  pass=Base64.encode64(HighLine.new.ask('Password: ') {|q| q.echo = '*' })
+  print "Please enter your twitter consumer information.\n"
+  print "You can regist a new consumer application from here.\n"
+  print "  http://dev.twitter.com/apps/new\n"
+  print "    Application Name: dumptter\n"
+  print "    Description: backup my tweets\n"
+  print "    Application Website: http://github.com/river24/dumptter\n"
+  print "    Application Type: Client\n"
+  print "    Default Access type: Read-only\n"
+  consumer_key = HighLine.new.ask('Consumer Key: ')
+  consumer_secret = HighLine.new.ask('Consumer Secret: ')
+  consumer = OAuth::Consumer.new(
+                                 consumer_key,
+                                 consumer_secret,
+                                 :site => "http://twitter.com"
+                                 )
+  request_token = consumer.get_request_token
+  print "Please access and authorize the request from dumptter.\n"
+  print "  #{request_token.authorize_url}\n"
+  oauth_verifier = HighLine.new.ask('Please enter the PIN: ')
+  access_token = request_token.get_access_token(:oauth_verifier => "#{oauth_verifier}")
   yaml_io = File.open("#{YAML_FILE}",'w')
-  yaml_io.puts "user: #{user}"
-  yaml_io.puts "pass: #{pass}"
+  yaml_io.puts "consumer_key: #{consumer_key}"
+  yaml_io.puts "consumer_secret: #{consumer_secret}"
+  yaml_io.puts "token_key: #{access_token.token}"
+  yaml_io.puts "token_secret: #{access_token.secret}"
   yaml_io.close
 end
 check_errors(errors)
@@ -80,14 +101,38 @@ check_errors(errors)
 invalid_yaml = false
 File.open(YAML_FILE) do |io|
   YAML.load_documents(io) do |y|
-    defined? y['user'] ? twitter_user=y['user'] : invalid_yaml = true
-    defined? y['pass'] ? twitter_pass=Base64.decode64(y['pass']) : invalid_yaml = true
+    if defined? y['consumer_key']
+      tmp_consumer_key=y['consumer_key']
+      twitter_consumer_key=tmp_consumer_key
+    else
+      invalid_yaml = true
+    end
+    if defined? y['consumer_secret']
+      tmp_consumer_secret=y['consumer_secret']
+      twitter_consumer_secret=tmp_consumer_secret
+    else
+      invalid_yaml = true
+    end
+    if defined? y['token_key']
+      tmp_token_key=y['token_key']
+      twitter_token_key=tmp_token_key
+    else
+      invalid_yaml = true
+    end
+    if defined? y['token_secret']
+      tmp_token_secret=y['token_secret']
+      twitter_token_secret=tmp_token_secret
+    else
+      invalid_yaml = true
+    end
   end
 end
 if invalid_yaml
   errors << "'#{YAML_FILE}' is invalid."
-end
-if twitter_user == '' || twitter_pass == ''
+elsif twitter_consumer_key == '' ||
+  twitter_consumer_secret == '' ||
+    twitter_token_key == '' || 
+    twitter_token_secret == ''
   errors << "'#{YAML_FILE}' is invalid."
 end
 check_errors(errors)
@@ -104,10 +149,19 @@ end
 class Status < ActiveRecord::Base
 end
 
-client = Twitter::Client.new(
-                             :login => twitter_user,
-                             :password => twitter_pass
-                             )
+consumer = OAuth::Consumer.new(
+                               twitter_consumer_key,
+                               twitter_consumer_secret,
+                               :site => 'http://twitter.com'
+                               )
+
+token = OAuth::AccessToken.new(
+                               consumer,
+                               twitter_token_key,
+                               twitter_token_secret
+                               )
+
+rubytter = OAuthRubytter.new(token)
 
 latest_status = Status.find(:first, :order=>"status_at DESC")
 if latest_status.nil?
@@ -122,9 +176,9 @@ loop = true
 page = 1
 while loop == true do
   if mode == 'init'
-    timeline = client.timeline_for(:me, :count => 200, :page => page)
+    timeline = rubytter.user_timeline(nil, :count => 200, :page => page)
   else
-    timeline = client.timeline_for(:me, :count => 200, :since_id => latest_status.status_id, :page => page)
+    timeline = rubytter.user_timeline(nil, :count => 200, :since_id => latest_status.status_id, :page => page)
   end
   if timeline.size < 200
     loop = false
@@ -150,7 +204,7 @@ all_timeline.reverse.each{|status|
                            :user_id => status.user.id,
                            :user_screen_name => status.user.screen_name,
                            :status_reply => reply,
-                           :status_at => Time.at(status.created_at.to_i)
+                           :status_at => Time.at(Time.parse(status.created_at).to_i)
                            )
                 )
 }

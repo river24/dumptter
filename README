@@ -7,14 +7,14 @@ This script collect your tweets on twitter.com.
 This library uses the following external Ruby libraries.
 
   highline
-  twitter4r
+  rubytter
   activerecord
   sqlite3
 
 You can install them using gem.
 
   sudo gem install highline
-  sudo gem install twitter4r
+  sudo gem install rubytter
   sudo gem install activerecord
   sudo gem install sqlite3-ruby
 
