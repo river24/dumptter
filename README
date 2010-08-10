@@ -8,6 +8,7 @@ This library uses the following external Ruby libraries.
 
   highline
   rubytter
+  oauth
   activerecord
   sqlite3
 
@@ -15,6 +16,7 @@ You can install them using gem.
 
   sudo gem install highline
   sudo gem install rubytter
+  sudo gem install oauth
   sudo gem install activerecord
   sudo gem install sqlite3-ruby
 
