@@ -82,7 +82,7 @@ else
   consumer = OAuth::Consumer.new(
                                  consumer_key,
                                  consumer_secret,
-                                 :site => "http://twitter.com"
+                                 :site => "http://api.twitter.com"
                                  )
   request_token = consumer.get_request_token
   print "Please access and authorize the request from dumptter.\n"
@@ -152,7 +152,7 @@ end
 consumer = OAuth::Consumer.new(
                                twitter_consumer_key,
                                twitter_consumer_secret,
-                               :site => 'http://twitter.com'
+                               :site => 'http://api.twitter.com'
                                )
 
 token = OAuth::AccessToken.new(
