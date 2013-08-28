@@ -176,9 +176,9 @@ loop = true
 page = 1
 while loop == true do
   if mode == 'init'
-    timeline = rubytter.user_timeline(nil, :count => 200, :page => page)
+    timeline = rubytter.user_timeline(:count => 200, :page => page)
   else
-    timeline = rubytter.user_timeline(nil, :count => 200, :since_id => latest_status.status_id, :page => page)
+    timeline = rubytter.user_timeline(:count => 200, :since_id => latest_status.status_id, :page => page)
   end
   if timeline.size < 200
     loop = false
