@@ -82,7 +82,7 @@ else
   consumer = OAuth::Consumer.new(
                                  consumer_key,
                                  consumer_secret,
-                                 :site => "http://api.twitter.com"
+                                 :site => "https://api.twitter.com"
                                  )
   request_token = consumer.get_request_token
   print "Please access and authorize the request from dumptter.\n"
@@ -147,12 +147,13 @@ else
 end
 
 class Status < ActiveRecord::Base
+  scope :newest, -> { order("status_at desc") }
 end
 
 consumer = OAuth::Consumer.new(
                                twitter_consumer_key,
                                twitter_consumer_secret,
-                               :site => 'http://api.twitter.com'
+                               :site => 'https://api.twitter.com'
                                )
 
 token = OAuth::AccessToken.new(
@@ -163,7 +164,7 @@ token = OAuth::AccessToken.new(
 
 rubytter = OAuthRubytter.new(token)
 
-latest_status = Status.find(:first, :order=>"status_at DESC")
+latest_status = Status.newest.first
 if latest_status.nil?
   mode = 'init'
   print "Collecting your all tweets (up to 3200, limited in API).\n"
@@ -176,9 +177,9 @@ loop = true
 page = 1
 while loop == true do
   if mode == 'init'
-    timeline = rubytter.user_timeline(nil, :count => 200, :page => page)
+    timeline = rubytter.user_timeline(:count => 200, :page => page)
   else
-    timeline = rubytter.user_timeline(nil, :count => 200, :since_id => latest_status.status_id, :page => page)
+    timeline = rubytter.user_timeline(:count => 200, :since_id => latest_status.status_id, :page => page)
   end
   if timeline.size < 200
     loop = false
