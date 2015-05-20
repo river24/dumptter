@@ -46,9 +46,9 @@ end
 
 def check_errors(errors)
   if errors.size > 0
-    errors.each{|error|
+    errors.each do |error|
       print "Error: #{error}\n"
-    }
+    end
     exit
   end
 end
@@ -82,7 +82,7 @@ else
   consumer = OAuth::Consumer.new(
                                  consumer_key,
                                  consumer_secret,
-                                 :site => "http://api.twitter.com"
+                                 :site => "https://api.twitter.com"
                                  )
   request_token = consumer.get_request_token
   print "Please access and authorize the request from dumptter.\n"
@@ -152,7 +152,7 @@ end
 consumer = OAuth::Consumer.new(
                                twitter_consumer_key,
                                twitter_consumer_secret,
-                               :site => 'http://api.twitter.com'
+                               :site => 'https://api.twitter.com'
                                )
 
 token = OAuth::AccessToken.new(
@@ -163,6 +163,8 @@ token = OAuth::AccessToken.new(
 
 rubytter = OAuthRubytter.new(token)
 
+min_id = -1
+latest_status_id = 1
 latest_status = Status.find(:first, :order=>"status_at DESC")
 if latest_status.nil?
   mode = 'init'
@@ -170,28 +172,41 @@ if latest_status.nil?
 else
   mode = 'update'
   print "Collecting your new tweets (up to 3200, limited in API).\n"
+  latest_status_id = latest_status.status_id
 end
 all_timeline = []
 loop = true
-page = 1
-while loop == true do
-  if mode == 'init'
-    timeline = rubytter.user_timeline(nil, :count => 200, :page => page)
+while loop do
+  if min_id < 0
+    timeline = rubytter.user_timeline(:count => 200)
   else
-    timeline = rubytter.user_timeline(nil, :count => 200, :since_id => latest_status.status_id, :page => page)
+    timeline = rubytter.user_timeline(:count => 200, :max_id => min_id - 1)
   end
-  if timeline.size < 200
+  if timeline.size == 0
     loop = false
   end
-  if page >= 16
-    loop = false
+  timeline.each do |status|
+    if min_id < 0
+      min_id = status.id.to_i
+    else
+      if status.id.to_i < min_id
+        min_id = status.id.to_i
+      end
+    end
+    if mode == 'init'
+      all_timeline.push(status)
+    elsif mode == 'update'
+      if status.id.to_i > latest_status_id
+        all_timeline.push(status)
+      else
+        loop = false
+      end
+    end
   end
-  all_timeline = all_timeline + timeline
-  page = page + 1
 end
 
 statuses = []
-all_timeline.reverse.each{|status|
+all_timeline.reverse.each do |status|
   if status.in_reply_to_status_id == nil
     reply = FALSE
   else
@@ -207,13 +222,13 @@ all_timeline.reverse.each{|status|
                            :status_at => Time.at(Time.parse(status.created_at).to_i)
                            )
                 )
-}
+end
 
 if statuses.size > 0
   Status.transaction {
-    statuses.each{|new_status|
+    statuses.each do |new_status|
       new_status.save
-    }
+    end
   }
 end
 
