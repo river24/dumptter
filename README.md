@@ -20,5 +20,7 @@ This script creates $HOME/.dumptter directory, config YAML file including your t
 
 ## Import from tweets archive
 
-	bundle exec bin/import_from_archive
+	bundle exec bin/import_from_archive ARCHIVE_DATA_DIR
+
+`ARCHIVE_DATA_DIR` is the `data` directory which is in the top directory of the zip file which you can get by requesting your archive.
 
