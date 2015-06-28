@@ -1,6 +1,6 @@
 # dumptter
--
-This script collect your tweets on twitter.com
+
+- This script collect your tweets on 'twitter.com'.
 
 ## Install
 
@@ -12,7 +12,13 @@ This script collect your tweets on twitter.com
 
 	bundle exec bin/dumptter
 
-This script will create $HOME/.dumptter directory and
-create config YAML file including your twitter account
-and sqlite3 database file in the directory.
+This script creates $HOME/.dumptter directory, config YAML file including your twitter account, and sqlite3 database file in the directory.
+
+## Import from old dumptter
+
+	bundle exec bin/import_from_dumptter1
+
+## Import from tweets archive
+
+	bundle exec bin/import_from_archive
 

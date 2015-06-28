@@ -42,5 +42,6 @@ Gemfile.lock
 .FBCLockFolder
 Thumbs.db*
 
+bin/dumptter1
+log/
 vendor/
-

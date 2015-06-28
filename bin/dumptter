@@ -3,18 +3,21 @@
 
 require 'time'
 require 'rubygems'
+require 'yaml'
+require 'highline'
 require 'rubytter'
 require 'oauth'
 require 'active_record'
 require 'sqlite3'
-require 'highline'
-require 'base64'
+require 'json'
+
+DUMPTTER_VERSION=2
 
 DUMPTTER_DIR="#{ENV['HOME']}/.dumptter"
 YAML_FILE="#{DUMPTTER_DIR}/config.yaml"
-DB_FILE="#{DUMPTTER_DIR}/dumptter.db"
+DB_FILE="#{DUMPTTER_DIR}/dumptter2.db"
 
-errors = []
+errors_array = []
 
 twitter_consumer_key=''
 twitter_consumer_secret=''
@@ -22,32 +25,35 @@ twitter_token_key=''
 twitter_token_secret=''
 
 ActiveRecord::Base.establish_connection(
-                                        :adapter => 'sqlite3',
-                                        :database  => DB_FILE
-                                        )
+  :adapter => 'sqlite3',
+  :database  => DB_FILE
+)
 
-class InitialSchema < ActiveRecord::Migration
-  def self.up
-    create_table :statuses do |t|
-      t.column :status_id, :integer, :null => false
-      t.column :status_text, :text
-      t.column :user_id, :integer, :null => false
-      t.column :user_screen_name, :text
-      t.column :status_reply, :boolean
-      t.column :status_at, :timestamp
-      t.column :created_at, :timestamp
-      t.column :updated_at, :timestamp
-    end
+def insert_tweets(tweets_array)
+  tweets_array.sort! do |tweet1, tweet2|
+    tweet1['id'] <=> tweet2['id']
   end
-  def self.down
-    drop_table :statuses
+
+  if tweets_array.size > 0
+    Tweet.transaction {
+      tweets_array.each do |tweet|
+        Tweet.create(
+          :id => tweet['id'],
+          :text => tweet['text'],
+          :json => JSON.generate(tweet),
+          :retweeted => tweet.has_key?('retweeted_status'),
+          :posted_at => Time.parse(tweet['created_at']),
+          :dumptter_version => DUMPTTER_VERSION
+        )
+      end
+    }
   end
 end
 
-def check_errors(errors)
-  if errors.size > 0
-    errors.each do |error|
-      print "Error: #{error}\n"
+def check_errors(errors_array)
+  if errors_array.size > 0
+    errors_array.each do |error|
+      STDERR.print "Error: #{error}\n"
     end
     exit
   end
@@ -56,17 +62,17 @@ end
 if FileTest.exist?(DUMPTTER_DIR)
   if FileTest::directory?(DUMPTTER_DIR)
   else
-    errors << "'#{DUMPTTER_DIR}/' is not a directory."
+    errors_array << "'#{DUMPTTER_DIR}/' is not a directory."
   end
 else
   Dir.mkdir("#{DUMPTTER_DIR}")
 end
-check_errors(errors)
+check_errors(errors_array)
 
 if FileTest.exist?(YAML_FILE)
   if FileTest::file?(YAML_FILE)
   else
-    errors << "'#{YAML_FILE}' is not a file."
+    errors_array << "'#{YAML_FILE}' is not a file."
   end
 else
   print "Please enter your twitter consumer information.\n"
@@ -80,10 +86,10 @@ else
   consumer_key = HighLine.new.ask('Consumer Key: ')
   consumer_secret = HighLine.new.ask('Consumer Secret: ')
   consumer = OAuth::Consumer.new(
-                                 consumer_key,
-                                 consumer_secret,
-                                 :site => "https://api.twitter.com"
-                                 )
+    consumer_key,
+    consumer_secret,
+    :site => "https://api.twitter.com"
+  )
   request_token = consumer.get_request_token
   print "Please access and authorize the request from dumptter.\n"
   print "  #{request_token.authorize_url}\n"
@@ -96,7 +102,7 @@ else
   yaml_io.puts "token_secret: #{access_token.secret}"
   yaml_io.close
 end
-check_errors(errors)
+check_errors(errors_array)
 
 invalid_yaml = false
 File.open(YAML_FILE) do |io|
@@ -128,107 +134,94 @@ File.open(YAML_FILE) do |io|
   end
 end
 if invalid_yaml
-  errors << "'#{YAML_FILE}' is invalid."
+  errors_array << "'#{YAML_FILE}' is invalid."
 elsif twitter_consumer_key == '' ||
-  twitter_consumer_secret == '' ||
-    twitter_token_key == '' || 
-    twitter_token_secret == ''
-  errors << "'#{YAML_FILE}' is invalid."
+      twitter_consumer_secret == '' ||
+      twitter_token_key == '' || 
+      twitter_token_secret == ''
+  errors_array << "'#{YAML_FILE}' is invalid."
 end
-check_errors(errors)
+check_errors(errors_array)
 
 if FileTest.exist?(DB_FILE)
-  if FileTest::file?(DB_FILE)
+  if !FileTest::file?(DB_FILE)
+    errors_array << "'#{DB_FILE}' is not a file."
+  end
+end
+check_errors(errors_array)
+
+ActiveRecord::Migrator.migrate('db/migrate', ENV["VERSION"] ? ENV["VERSION"].to_i : nil)
+
+class Tweet < ActiveRecord::Base
+end
+
+mode = 'fetch'
+
+if ARGV.size == 0
+  mode = 'fetch'
+elsif ARGV.size == 2
+  if ARGV[0].to_s == 'search'
+    mode = 'search'
+    QUERY = ARGV[1].to_s
   else
-    errors << "'#{DB_FILE}' is not a file."
+    errors_array << "'#{ARGV[0]}' is invalid mode."
   end
 else
-  InitialSchema.migrate(:up)
+  errors_array << "'#{ARGV[0]}' is invalid mode."
 end
+check_errors(errors_array)
 
-class Status < ActiveRecord::Base
-end
-
-consumer = OAuth::Consumer.new(
-                               twitter_consumer_key,
-                               twitter_consumer_secret,
-                               :site => 'https://api.twitter.com'
-                               )
-
-token = OAuth::AccessToken.new(
-                               consumer,
-                               twitter_token_key,
-                               twitter_token_secret
-                               )
-
-rubytter = OAuthRubytter.new(token)
-
-min_id = -1
-latest_status_id = 1
-latest_status = Status.find(:first, :order=>"status_at DESC")
-if latest_status.nil?
-  mode = 'init'
-  print "Collecting your all tweets (up to 3200, limited in API).\n"
+if mode == 'search'
+  tweets_array = Tweet.where('text LIKE ?', "%#{QUERY}%")
+  tweets_array.each do |tweet|
+    print "#{tweet.text}\n"
+    print " - ID: #{tweet.id} @ #{tweet.posted_at}\n"
+  end
 else
-  mode = 'update'
-  print "Collecting your new tweets (up to 3200, limited in API).\n"
-  latest_status_id = latest_status.status_id
-end
-all_timeline = []
-loop = true
-while loop do
-  if min_id < 0
-    timeline = rubytter.user_timeline(:count => 200)
-  else
-    timeline = rubytter.user_timeline(:count => 200, :max_id => min_id - 1)
-  end
-  if timeline.size == 0
-    loop = false
-  end
-  timeline.each do |status|
+  consumer = OAuth::Consumer.new(
+    twitter_consumer_key,
+    twitter_consumer_secret,
+    :site => 'https://api.twitter.com'
+  )
+
+  token = OAuth::AccessToken.new(
+    consumer,
+    twitter_token_key,
+    twitter_token_secret
+  )
+
+  rubytter = OAuthRubytter.new(token)
+
+  tweets_array = []
+
+  min_id = -1
+  loop = true
+  while loop do
     if min_id < 0
-      min_id = status.id.to_i
+      timeline = rubytter.user_timeline(:count => 200)
     else
-      if status.id.to_i < min_id
-        min_id = status.id.to_i
-      end
+      timeline = rubytter.user_timeline(:count => 200, :max_id => min_id - 1)
     end
-    if mode == 'init'
-      all_timeline.push(status)
-    elsif mode == 'update'
-      if status.id.to_i > latest_status_id
-        all_timeline.push(status)
+    if timeline.size == 0
+      loop = false
+    end
+    timeline.each do |tweet|
+      if min_id < 0
+        min_id = tweet.id.to_i
+      else
+        if tweet.id.to_i < min_id
+          min_id = tweet.id.to_i
+        end
+      end
+      tmp_tweet = Tweet.where(:id => tweet.id.to_i).first
+      if tmp_tweet.nil?
+        tweets_array.push(JSON.parse(tweet.to_json))
       else
         loop = false
       end
     end
   end
-end
 
-statuses = []
-all_timeline.reverse.each do |status|
-  if status.in_reply_to_status_id == nil
-    reply = FALSE
-  else
-    reply = TRUE
-  end
-  statuses.push(
-                Status.new(
-                           :status_id => status.id,
-                           :status_text => status.text,
-                           :user_id => status.user.id,
-                           :user_screen_name => status.user.screen_name,
-                           :status_reply => reply,
-                           :status_at => Time.at(Time.parse(status.created_at).to_i)
-                           )
-                )
-end
-
-if statuses.size > 0
-  Status.transaction {
-    statuses.each do |new_status|
-      new_status.save
-    end
-  }
+  insert_tweets(tweets_array)
 end
 

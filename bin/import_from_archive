@@ -1,0 +1,133 @@
+#!/usr/bin/env ruby
+# -*- coding: utf-8 -*-
+
+require 'time'
+require 'rubygems'
+require 'active_record'
+require 'sqlite3'
+require 'json'
+
+DUMPTTER_DIR="#{ENV['HOME']}/.dumptter"
+YAML_FILE="#{DUMPTTER_DIR}/config.yaml"
+DB_FILE="#{DUMPTTER_DIR}/dumptter2.db"
+
+errors_array = []
+
+twitter_consumer_key=''
+twitter_consumer_secret=''
+twitter_token_key=''
+twitter_token_secret=''
+
+ActiveRecord::Base.establish_connection(
+  :adapter => 'sqlite3',
+  :database  => DB_FILE
+)
+
+def insert_tweets(tweets_array)
+  tweets_array.sort! do |tweet1, tweet2|
+    tweet1['id'] <=> tweet2['id']
+  end
+
+  if tweets_array.size > 0
+    Tweet.transaction {
+      tweets_array.each do |tweet|
+        Tweet.create(
+          :id => tweet['id'],
+          :text => tweet['text'],
+          :json => JSON.generate(tweet),
+          :retweeted => tweet.has_key?('retweeted_status'),
+          :posted_at => Time.parse(tweet['created_at']),
+          :dumptter_version => 0
+        )
+      end
+    }
+  end
+end
+
+def check_errors(errors_array)
+  if errors_array.size > 0
+    errors_array.each do |error|
+      STDERR.print "Error: #{error}\n"
+    end
+    exit
+  end
+end
+
+if FileTest.exist?(DUMPTTER_DIR)
+  if FileTest::directory?(DUMPTTER_DIR)
+  else
+    errors_array << "'#{DUMPTTER_DIR}/' is not a directory."
+  end
+else
+  Dir.mkdir("#{DUMPTTER_DIR}")
+end
+check_errors(errors_array)
+
+if FileTest.exist?(DB_FILE)
+  if !FileTest::file?(DB_FILE)
+    errors_array << "'#{DB_FILE}' is not a file."
+  end
+end
+check_errors(errors_array)
+
+ActiveRecord::Migrator.migrate('db/migrate', ENV["VERSION"] ? ENV["VERSION"].to_i : nil)
+
+class Tweet < ActiveRecord::Base
+end
+
+if ARGV.size == 0
+  errors_array << "Please specify ARCHIVE_DATA_DIR."
+else
+  ARCHIVE_DATA_DIR = ARGV[0].to_s
+end
+check_errors(errors_array)
+
+js_file_array = []
+
+JS_DIR=File.expand_path("#{ARCHIVE_DATA_DIR}/js/tweets")
+
+valid_dir = false
+if File.exist?(JS_DIR)
+  if File.directory?(JS_DIR)
+    valid_dir = true
+  end
+end
+
+if !valid_dir
+  errors_array << "'#{ARCHIVE_DATA_DIR}' is invalid."
+end
+check_errors(errors_array)
+
+Dir::glob("#{JS_DIR}/*.js").each do |js_file|
+  js_file_array.push(js_file)
+end
+
+js_file_array.sort!
+
+js_file_array.each do |js_file|
+  tweets_array = []
+
+  json_str = ""
+  count = 0
+  open(js_file) do |file|
+    while line = file.gets
+      if count > 0
+        json_str = "#{json_str}#{line}"
+      end
+      count += 1
+    end
+  end
+  begin
+    json = JSON.parse(json_str)
+    json.each do |tweet|
+      tmp_tweet = Tweet.where(:id => tweet['id']).first
+      if tmp_tweet.nil?
+        tweets_array.push(tweet)
+      end
+    end
+  rescue => e
+  end
+
+  insert_tweets(tweets_array)
+end
+
