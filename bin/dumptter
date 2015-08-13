@@ -160,7 +160,9 @@ mode = 'fetch'
 if ARGV.size == 0
   mode = 'fetch'
 elsif ARGV.size == 1
-  if ARGV[0].to_s == 'recent'
+  if ARGV[0].to_s == 'count'
+    mode = 'count'
+  elsif ARGV[0].to_s == 'recent'
     mode = 'recent'
     offset = 0
     limit = 10
@@ -183,7 +185,10 @@ else
 end
 check_errors(errors_array)
 
-if mode == 'recent'
+if mode == 'count'
+  count = Tweet.count
+  print "Count: #{count}\n"
+elsif mode == 'recent'
   tweets_array = Tweet.order(id: :desc).limit(limit).offset(offset)
   tweets_array.each do |tweet|
     print "#{tweet.text}\n"
