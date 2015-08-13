@@ -159,8 +159,20 @@ mode = 'fetch'
 
 if ARGV.size == 0
   mode = 'fetch'
+elsif ARGV.size == 1
+  if ARGV[0].to_s == 'recent'
+    mode = 'recent'
+    offset = 0
+    limit = 10
+  else
+    errors_array << "'#{ARGV[0]}' is invalid mode."
+  end
 elsif ARGV.size == 2
-  if ARGV[0].to_s == 'search'
+  if ARGV[0].to_s == 'recent'
+    mode = 'recent'
+    offset = ARGV[1].to_i
+    limit = 10
+  elsif ARGV[0].to_s == 'search'
     mode = 'search'
     QUERY = ARGV[1].to_s
   else
@@ -171,7 +183,13 @@ else
 end
 check_errors(errors_array)
 
-if mode == 'search'
+if mode == 'recent'
+  tweets_array = Tweet.order(id: :desc).limit(limit).offset(offset)
+  tweets_array.each do |tweet|
+    print "#{tweet.text}\n"
+    print " - ID: #{tweet.id} @ #{tweet.posted_at}\n"
+  end
+elsif mode == 'search'
   tweets_array = Tweet.where('text LIKE ?', "%#{QUERY}%")
   tweets_array.each do |tweet|
     print "#{tweet.text}\n"
