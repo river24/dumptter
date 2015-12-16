@@ -11,7 +11,7 @@ require 'active_record'
 require 'sqlite3'
 require 'json'
 
-DUMPTTER_VERSION=2
+DUMPTTER_VERSION=3
 
 DUMPTTER_DIR="#{ENV['HOME']}/.dumptter"
 YAML_FILE="#{DUMPTTER_DIR}/config.yaml"
@@ -153,6 +153,7 @@ check_errors(errors_array)
 ActiveRecord::Migrator.migrate('db/migrate', ENV["VERSION"] ? ENV["VERSION"].to_i : nil)
 
 class Tweet < ActiveRecord::Base
+  self.primary_key = :id
 end
 
 mode = 'fetch'
@@ -160,12 +161,16 @@ mode = 'fetch'
 if ARGV.size == 0
   mode = 'fetch'
 elsif ARGV.size == 1
-  if ARGV[0].to_s == 'count'
+  if ARGV[0].to_s == 'fetch'
+    mode = 'fetch'
+  elsif ARGV[0].to_s == 'count'
     mode = 'count'
   elsif ARGV[0].to_s == 'recent'
     mode = 'recent'
     offset = 0
     limit = 10
+  elsif ARGV[0].to_s == 'update'
+    mode = 'update'
   else
     errors_array << "'#{ARGV[0]}' is invalid mode."
   end
@@ -215,36 +220,57 @@ else
 
   rubytter = OAuthRubytter.new(token)
 
-  tweets_array = []
+  if mode == 'fetch'
+    tweets_array = []
 
-  min_id = -1
-  loop = true
-  while loop do
-    if min_id < 0
-      timeline = rubytter.user_timeline(:count => 200)
-    else
-      timeline = rubytter.user_timeline(:count => 200, :max_id => min_id - 1)
-    end
-    if timeline.size == 0
-      loop = false
-    end
-    timeline.each do |tweet|
+    min_id = -1
+    loop = true
+    while loop do
       if min_id < 0
-        min_id = tweet.id.to_i
+        timeline = rubytter.user_timeline(:count => 200)
       else
-        if tweet.id.to_i < min_id
+        timeline = rubytter.user_timeline(:count => 200, :max_id => min_id - 1)
+      end
+      if timeline.size == 0
+        loop = false
+      end
+      timeline.each do |tweet|
+        if min_id < 0
           min_id = tweet.id.to_i
+        else
+          if tweet.id.to_i < min_id
+            min_id = tweet.id.to_i
+          end
+        end
+        tmp_tweet = Tweet.where(:id => tweet.id.to_i).first
+        if tmp_tweet.nil?
+          tweets_array.push(JSON.parse(tweet.to_json))
+        else
+          loop = false
         end
       end
-      tmp_tweet = Tweet.where(:id => tweet.id.to_i).first
-      if tmp_tweet.nil?
-        tweets_array.push(JSON.parse(tweet.to_json))
-      else
-        loop = false
+    end
+
+    insert_tweets(tweets_array)
+
+  elsif mode == 'update'
+    old_tweet = Tweet.where('dumptter_version < ?', DUMPTTER_VERSION.to_i).order(id: :asc).limit(1).first
+    if !old_tweet.nil?
+      begin
+        updated_tweet = rubytter.show(old_tweet.id)
+        updated_tweet_json = JSON.parse(updated_tweet.to_json)
+        old_tweet.update_attributes(
+          {
+            :json => JSON.generate(updated_tweet_json),
+            :posted_at => Time.parse(updated_tweet_json['created_at']),
+            :dumptter_version => DUMPTTER_VERSION
+          }
+        )
+      rescue
+        p "destroy tweet"
+        # old_tweet.destroy
       end
     end
   end
-
-  insert_tweets(tweets_array)
 end
 
