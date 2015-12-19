@@ -35,7 +35,7 @@ class Rubytter
   end
 end
 
-def insert_tweets(tweets_array)
+def insert_tweets(tweets_array, version=DUMPTTER_VERSION)
   tweets_array.sort! do |tweet1, tweet2|
     tweet1['id'] <=> tweet2['id']
   end
@@ -49,7 +49,7 @@ def insert_tweets(tweets_array)
           :json => JSON.generate(tweet),
           :retweeted => tweet.has_key?('retweeted_status'),
           :posted_at => Time.parse(tweet['created_at']),
-          :dumptter_version => DUMPTTER_VERSION
+          :dumptter_version => version
         )
       end
     }
@@ -175,8 +175,6 @@ elsif ARGV.size == 1
     mode = 'recent'
     offset = 0
     limit = 10
-  elsif ARGV[0].to_s == 'update'
-    mode = 'update'
   else
     errors_array << "'#{ARGV[0]}' is invalid mode."
   end
@@ -188,6 +186,9 @@ elsif ARGV.size == 2
   elsif ARGV[0].to_s == 'search'
     mode = 'search'
     QUERY = ARGV[1].to_s
+  elsif ARGV[0].to_s == 'import'
+    mode = 'import'
+    ARCHIVE_DATA_DIR = ARGV[1].to_s
   else
     errors_array << "'#{ARGV[0]}' is invalid mode."
   end
@@ -259,17 +260,74 @@ else
 
     insert_tweets(tweets_array)
 
-  elsif mode == 'update'
-    while true
-      old_tweets = Tweet.where('dumptter_version < ?', DUMPTTER_VERSION.to_i).order(id: :asc).limit(100)
+  elsif mode == 'import'
+    js_file_array = []
 
-      if old_tweets.size == 0
+    JS_DIR=File.expand_path("#{ARCHIVE_DATA_DIR}/js/tweets")
+
+    valid_dir = false
+    if File.exist?(JS_DIR)
+      if File.directory?(JS_DIR)
+        valid_dir = true
+      end
+    end
+
+    if !valid_dir
+      errors_array << "'#{ARCHIVE_DATA_DIR}' is invalid."
+    end
+    check_errors(errors_array)
+
+    Dir::glob("#{JS_DIR}/*.js").each do |js_file|
+      js_file_array.push(js_file)
+    end
+
+    js_file_array.sort!
+
+    js_file_array.each do |js_file|
+      print "Importing from '#{js_file}'\n"
+      tweets_array = []
+
+      json_str = ""
+      count = 0
+      open(js_file) do |file|
+        while line = file.gets
+          if count > 0
+            json_str = "#{json_str}#{line}"
+          end
+          count += 1
+        end
+      end
+      begin
+        json = JSON.parse(json_str)
+        json.each do |tweet|
+          tmp_tweet = Tweet.where(:id => tweet['id']).first
+          if tmp_tweet.nil?
+            tweets_array.push(tweet)
+          end
+        end
+      rescue => e
+      end
+
+      insert_tweets(tweets_array,0)
+    end
+
+    imported_tweets_count = Tweet.where('dumptter_version = 0').count
+    print "#{imported_tweets_count} tweets is imported\n"
+
+    updated_tweets_count = 0
+
+    while updated_tweets_count < imported_tweets_count
+      imported_tweets = Tweet.where('dumptter_version = 0').order(id: :asc).limit(100)
+
+      if imported_tweets.size == 0
         break
       end
 
+      print "Updating imported tweets: #{updated_tweets_count+1} - #{updated_tweets_count+imported_tweets.size} / #{imported_tweets_count}\n"
+
       id_array = []
-      old_tweets.each do |old_tweet|
-        id_array.push(old_tweet.id)
+      imported_tweets.each do |imported_tweet|
+        id_array.push(imported_tweet.id)
       end
 
       if id_array.size > 0
@@ -300,6 +358,7 @@ else
 
       interval = 60 * 15 / 180 + 1
       sleep(interval)
+      updated_tweets_count += imported_tweets.size
     end
   end
 end

@@ -17,16 +17,11 @@ This script creates $HOME/.dumptter directory, config YAML file including your t
 ## Import from your twitter archive
 
 You can import tweets from your twitter archive by the following command.  
-It will take time to import.
+It will take long-time to import and update (retrieve full json(s) for imported tweets).
 
-	bundle exec bin/import_from_archive ARCHIVE_DATA_DIR
+	bundle exec bin/dumptter import ARCHIVE_DATA_DIR
 
 `ARCHIVE_DATA_DIR` is the `data` directory which is in the top directory of the zip file of your twitter archive which you can get from the following URL.
 
 	https://twitter.com/settings/account
-
-After finishing import, it is recommended to run the following command.  
-It will take long-time.
-
-	bundle exec bin/dumptter update
 
