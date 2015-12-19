@@ -9,7 +9,7 @@ require 'json'
 
 DUMPTTER_DIR="#{ENV['HOME']}/.dumptter"
 YAML_FILE="#{DUMPTTER_DIR}/config.yaml"
-DB_FILE="#{DUMPTTER_DIR}/dumptter2.db"
+DB_FILE="#{DUMPTTER_DIR}/dumptter.db"
 
 errors_array = []
 

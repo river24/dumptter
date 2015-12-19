@@ -14,13 +14,19 @@
 
 This script creates $HOME/.dumptter directory, config YAML file including your twitter account, and sqlite3 database file in the directory.
 
-## Import from old dumptter
+## Import from your twitter archive
 
-	bundle exec bin/import_from_dumptter1
-
-## Import from tweets archive
+You can import tweets from your twitter archive by the following command.  
+It will take time to import.
 
 	bundle exec bin/import_from_archive ARCHIVE_DATA_DIR
 
-`ARCHIVE_DATA_DIR` is the `data` directory which is in the top directory of the zip file which you can get by requesting your archive.
+`ARCHIVE_DATA_DIR` is the `data` directory which is in the top directory of the zip file of your twitter archive which you can get from the following URL.
+
+	https://twitter.com/settings/account
+
+After finishing import, it is recommended to run the following command.  
+It will take long-time.
+
+	bundle exec bin/dumptter update
 

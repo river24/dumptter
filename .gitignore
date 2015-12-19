@@ -43,5 +43,6 @@ Gemfile.lock
 Thumbs.db*
 
 bin/dumptter1
+bin/import_from_dumptter1
 log/
 vendor/

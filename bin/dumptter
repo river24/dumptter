@@ -15,7 +15,7 @@ DUMPTTER_VERSION=3
 
 DUMPTTER_DIR="#{ENV['HOME']}/.dumptter"
 YAML_FILE="#{DUMPTTER_DIR}/config.yaml"
-DB_FILE="#{DUMPTTER_DIR}/dumptter2.db"
+DB_FILE="#{DUMPTTER_DIR}/dumptter.db"
 
 errors_array = []
 
@@ -28,6 +28,12 @@ ActiveRecord::Base.establish_connection(
   :adapter => 'sqlite3',
   :database  => DB_FILE
 )
+
+class Rubytter
+  def lookup(params = {})
+    get('/statuses/lookup', params)
+  end
+end
 
 def insert_tweets(tweets_array)
   tweets_array.sort! do |tweet1, tweet2|
@@ -254,22 +260,46 @@ else
     insert_tweets(tweets_array)
 
   elsif mode == 'update'
-    old_tweet = Tweet.where('dumptter_version < ?', DUMPTTER_VERSION.to_i).order(id: :asc).limit(1).first
-    if !old_tweet.nil?
-      begin
-        updated_tweet = rubytter.show(old_tweet.id)
-        updated_tweet_json = JSON.parse(updated_tweet.to_json)
-        old_tweet.update_attributes(
-          {
-            :json => JSON.generate(updated_tweet_json),
-            :posted_at => Time.parse(updated_tweet_json['created_at']),
-            :dumptter_version => DUMPTTER_VERSION
-          }
-        )
-      rescue
-        p "destroy tweet"
-        # old_tweet.destroy
+    while true
+      old_tweets = Tweet.where('dumptter_version < ?', DUMPTTER_VERSION.to_i).order(id: :asc).limit(100)
+
+      if old_tweets.size == 0
+        break
       end
+
+      id_array = []
+      old_tweets.each do |old_tweet|
+        id_array.push(old_tweet.id)
+      end
+
+      if id_array.size > 0
+        query_hash = {}
+        query_hash['id'] = id_array.join(',')
+        query_hash['map'] = true
+        updated_tweets = rubytter.lookup(query_hash)
+
+        if updated_tweets.has_key?(:id)
+          updated_tweets[:id].each do |key, value|
+            if value.nil?
+              Tweet.update(
+                key.to_s.to_i,
+                :dumptter_version => DUMPTTER_VERSION
+              )
+            else
+              updated_tweet_json = JSON.parse(value.to_json)
+              Tweet.update(
+                updated_tweet_json['id'],
+                :json => JSON.generate(updated_tweet_json),
+                :posted_at => Time.parse(updated_tweet_json['created_at']),
+                :dumptter_version => DUMPTTER_VERSION
+              )
+            end
+          end
+        end
+      end
+
+      interval = 60 * 15 / 180 + 1
+      sleep(interval)
     end
   end
 end
