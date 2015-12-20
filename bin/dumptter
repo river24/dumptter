@@ -43,14 +43,17 @@ def insert_tweets(tweets_array, version=DUMPTTER_VERSION)
   if tweets_array.size > 0
     Tweet.transaction {
       tweets_array.each do |tweet|
-        Tweet.create(
-          :id => tweet['id'],
-          :text => tweet['text'],
-          :json => JSON.generate(tweet),
-          :retweeted => tweet.has_key?('retweeted_status'),
-          :posted_at => Time.parse(tweet['created_at']),
-          :dumptter_version => version
-        )
+        tmp_tweet = Tweet.where(:id => tweet['id']).first
+        if tmp_tweet.nil?
+          Tweet.create(
+            :id => tweet['id'],
+            :text => tweet['text'],
+            :json => JSON.generate(tweet),
+            :retweeted => tweet.has_key?('retweeted_status'),
+            :posted_at => Time.parse(tweet['created_at']),
+            :dumptter_version => version
+          )
+        end
       end
     }
   end
