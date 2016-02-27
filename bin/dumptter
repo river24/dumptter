@@ -207,13 +207,23 @@ elsif mode == 'recent'
   tweets_array = Tweet.order(id: :desc).limit(limit).offset(offset)
   tweets_array.each do |tweet|
     print "#{tweet.text}\n"
-    print " - ID: #{tweet.id} @ #{tweet.posted_at}\n"
+    tweet_json = JSON.parse(tweet.json)
+    if tweet.retweeted
+      print " - URL: https://twitter.com/#{tweet_json['retweeted_status']['user']['screen_name']}/status/#{tweet_json['retweeted_status']['id']} @ #{tweet.posted_at}\n"
+    else
+      print " - URL: https://twitter.com/#{tweet_json['user']['screen_name']}/status/#{tweet.id} @ #{tweet.posted_at}\n"
+    end
   end
 elsif mode == 'search'
   tweets_array = Tweet.where('text LIKE ?', "%#{QUERY}%")
   tweets_array.each do |tweet|
     print "#{tweet.text}\n"
-    print " - ID: #{tweet.id} @ #{tweet.posted_at}\n"
+    tweet_json = JSON.parse(tweet.json)
+    if tweet.retweeted
+      print " - URL: https://twitter.com/#{tweet_json['retweeted_status']['user']['screen_name']}/status/#{tweet_json['retweeted_status']['id']} @ #{tweet.posted_at}\n"
+    else
+      print " - URL: https://twitter.com/#{tweet_json['user']['screen_name']}/status/#{tweet.id} @ #{tweet.posted_at}\n"
+    end
   end
 else
   consumer = OAuth::Consumer.new(
